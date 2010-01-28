@@ -1,0 +1,87 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+	"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+
+	<title>vincenzo/LIBSVM-Plus @ GitHub</title>
+	
+	<style type="text/css">
+		body {
+  		margin-top: 1.0em;
+  		background-color: #373a53;
+		  font-family: "Helvetica,Arial,FreeSans"; 
+  		color: #ffffff;
+    }
+    #container {
+      margin: 0 auto;
+      width: 700px;
+    }
+		h1 { font-size: 3.8em; color: #c8c5ac; margin-bottom: 3px; }
+		h1 .small { font-size: 0.4em; }
+		h1 a { text-decoration: none }
+		h2 { font-size: 1.5em; color: #c8c5ac; }
+    h3 { text-align: center; color: #c8c5ac; }
+    a { color: #c8c5ac; }
+    .description { font-size: 1.2em; margin-bottom: 30px; margin-top: 30px; font-style: italic;}
+    .download { float: right; }
+		pre { background: #000; color: #fff; padding: 15px;}
+    hr { border: 0; width: 80%; border-bottom: 1px solid #aaa}
+    .footer { text-align:center; padding-top:30px; font-style: italic; }
+	</style>
+	
+</head>
+
+<body>
+  <a href="http://github.com/vincenzo/LIBSVM-Plus"><img style="position: absolute; top: 0; right: 0; border: 0;" src="http://s3.amazonaws.com/github/ribbons/forkme_right_darkblue_121621.png" alt="Fork me on GitHub" /></a>
+  
+  <div id="container">
+
+    <div class="download">
+      <a href="http://github.com/vincenzo/LIBSVM-Plus/zipball/master">
+        <img border="0" width="90" src="http://github.com/images/modules/download/zip.png"></a>
+      <a href="http://github.com/vincenzo/LIBSVM-Plus/tarball/master">
+        <img border="0" width="90" src="http://github.com/images/modules/download/tar.png"></a>
+    </div>
+      
+    <h1><a href="http://github.com/vincenzo/LIBSVM-Plus">LIBSVM-Plus</a> 
+      <span class="small">by <a href="http://github.com/vincenzo">vincenzo</a></span></h1>
+
+    <div class="description">
+      Enhanced version of LIBSVM project (C++ version)
+    </div>
+
+    <p>These are the differences of LIBSVM Plus with respect to the official version.
+Four additional kernels: Stump, Perceptron, Laplacian, Exponential. 
+Such kernels might be called “infinite ensemble kernels” because a nonlinear SVM which uses them corresponds to a infinite ensemble classifier. Look at the publications of Hsuan-Tien Lin for more theoretical explanations. The code for realizing the above kernels was back-ported and adapted from his LIBSVM fork based on the older 2.8 version;
+Three additional SVM models: Classification via L2SVM, Support Vector Domain Description (SVDD) via L1SVM and via L2SVM. The code was back-ported and adapted from a LIBSVM tool: Calculating the radius of the smallest sphere containing all training data. The SVDD can be used as One Class SVM alternative. More theoretical explanations about SVDD can be found in David J. Tax PhD thesis and other papers;
+Updated python tools: the two python scripts easy.py and grid.py were modified in order to allow a normal execution without requiring gnuplot to be installed. Moreover, the easy.py script now accepts a third parameter on the command line, that is the number of the kernel to use. The script grid.py explicitly handles that with the -t switch;
+More python tools: two scripts for converting datasets from LIBSVM file format to classical “dense” ASCII files (and viceversa) are provided in bundle. Very useful when you need to convert dataset from the file format used by UCI Machine Learning Repository. The scripts were originally created by Hsuan-Tien Lin;
+Only C++ code supported and mantained, due to the lack of enough time. No Java or Python code provided;
+Only Unix: for the same reason stated above, I only test on Linux and Mac OS X, which makes LIBSVM Plus likely to work also on other modern Unix systems. Anyway, you may try the Makefile.win included in official LIBSVM package to compile and test LIBSVM Plus on Windows platforms.</p><h2>Authors</h2>
+<p>Vincenzo Russo (nemo@neminis.org)<br/><br/>      </p>
+<h2>Contact</h2>
+<p>Vincenzo Russo (nemo@neminis.org)<br/>      </p>
+
+
+    <h2>Download</h2>
+    <p>
+      You can download this project in either
+      <a href="http://github.com/vincenzo/LIBSVM-Plus/zipball/master">zip</a> or
+      <a href="http://github.com/vincenzo/LIBSVM-Plus/tarball/master">tar</a> formats.
+    </p>
+    <p>You can also clone the project with <a href="http://git-scm.com">Git</a>
+      by running:
+      <pre>$ git clone git://github.com/vincenzo/LIBSVM-Plus</pre>
+    </p>
+      
+    <div class="footer">
+      get the source code on GitHub : <a href="http://github.com/vincenzo/LIBSVM-Plus">vincenzo/LIBSVM-Plus</a>
+    </div>
+    
+  </div>
+
+  
+</body>
+</html>
