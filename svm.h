@@ -87,10 +87,10 @@ struct svm_parameter
  * */
 struct svm_model
 {
-	svm_parameter param;	// parameter
+	struct svm_parameter param;	// parameter
 	int nr_class;		// number of classes, = 2 in regression/one class svm
 	int l;			// total #SV
-	svm_node **SV;		// SVs (SV[l])
+	struct svm_node **SV;	// SVs (SV[l])
 	
 	int *BSV_idx;		// indices of the BSVs in the original dataset
 	int *SV_idx;		// indices of the SVs in the original dataset

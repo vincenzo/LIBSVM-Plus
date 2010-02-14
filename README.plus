@@ -56,6 +56,22 @@ lbsv (the number of BSVs). Finally, the enumeration element RBF (which in the
 original LIBSVM refers to the Gaussian kernel) was renamed GAUSSIAN, because 
 there are several kernels which belong to the RBF class, not only the Gaussian one.
 
+Windows
+=======
+
+(by Vladislavs Dovgalecs, Universite Bordeaux I, FRANCE)
+
+To compile for Windows, you will need :
+
+1. Microsoft Visual Studio (worked with Visual C++ 2008 Express)
+2. nmake.exe, link.exe and cl.exe are usually found in VC bin directory
+3. Make sure your PATH variable reflects the location of Visual Studio bin directory
+(cl.exe, nmake.exe and link.exe)
+
+Compilation is done following few steps :
+1. Open the console and run VCVARS32.bat. This will setup VC global variables.
+2. Run 'nmake -f Makefile.win'
+
 
 License
 =======
