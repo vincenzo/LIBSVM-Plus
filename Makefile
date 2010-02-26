@@ -30,7 +30,8 @@ install: all lib
 	/usr/bin/install -m 0755 svm-predict $(BIN_DIR)
 	/usr/bin/install -m 0755 svm-scale $(BIN_DIR)
 	/usr/bin/install -m 0755 libsvm.so.$(SHVER) $(LIB_DIR)
-	test -e $(LIB_DIR)/libsvm.so || /bin/ln -s $(LIB_DIR) $(LIB_DIR)/libsvm.so
+	test -e $(LIB_DIR)/libsvm.so && rm $(LIB_DIR)/libsvm.so 
+	/bin/ln -s $(LIB_DIR) $(LIB_DIR)/libsvm.so
 	/bin/cp svm.h $(INC_DIR)
 clean:
 	rm -f *~ svm.o svm-train svm-predict svm-scale
