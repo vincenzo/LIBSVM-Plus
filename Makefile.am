@@ -14,3 +14,6 @@ svm_scale_LDADD = svm.a -lstdc++
 lib_LTLIBRARIES = libsvm.la
 libsvm_la_SOURCES = svm.cpp
 libsvm_la_LDFLAGS = -version-info $(LIBSVM_SHARED_LIB_VERSION)
+
+libsvm_include_HEADERS = svm.h
+libsvm_includedir=$(includedir)
