@@ -7,9 +7,9 @@ svm_predict_SOURCES = svm-predict.c
 svm_train_SOURCES = svm-train.c
 svm_scale_SOURCES = svm-scale.c
 
-svm_predict_LDADD = svm.a -lstdc++
-svm_train_LDADD = svm.a -lstdc++
-svm_scale_LDADD = svm.a -lstdc++
+svm_predict_LDADD = svm.$(OBJEXT) -lstdc++
+svm_train_LDADD = svm.$(OBJEXT) -lstdc++
+svm_scale_LDADD = svm.$(OBJEXT) -lstdc++
 
 lib_LTLIBRARIES = libsvm.la
 libsvm_la_SOURCES = svm.cpp
