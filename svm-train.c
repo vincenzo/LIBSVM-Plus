@@ -14,31 +14,40 @@ void exit_with_help()
 	"Usage: svm-train [options] training_set_file [model_file]\n"
 	"options:\n"
 	"-s svm_type : set type of SVM (default 0)\n"
-	"	0 -- C-SVC\n"
-	"	1 -- nu-SVC\n"
-	"	2 -- one-class SVM\n"
-	"	3 -- epsilon-SVR\n"
-	"	4 -- nu-SVR\n"
+	"\t%d -- C-SVC (L1SVM)\n"
+	"\t%d -- C-SVC (L2SVM)\n"
+	"\t%d -- nu-SVC\n"
+	"\t%d -- one-class SVM\n"
+	"\t%d -- epsilon-SVR\n"
+	"\t%d -- nu-SVR\n"
+	"\t%d -- SVDD (L1SVM)\n"
+	"\t%d -- SVDD (L2SVM)\n"
 	"-t kernel_type : set type of kernel function (default 2)\n"
-	"	0 -- linear: u'*v\n"
-	"	1 -- polynomial: (gamma*u'*v + coef0)^degree\n"
-	"	2 -- radial basis function: exp(-gamma*|u-v|^2)\n"
-	"	3 -- sigmoid: tanh(gamma*u'*v + coef0)\n"
-	"	4 -- precomputed kernel (kernel values in training_set_file)\n"
-	"-d degree : set degree in kernel function (default 3)\n"
-	"-g gamma : set gamma in kernel function (default 1/num_features)\n"
-	"-r coef0 : set coef0 in kernel function (default 0)\n"
-	"-c cost : set the parameter C of C-SVC, epsilon-SVR, and nu-SVR (default 1)\n"
-	"-n nu : set the parameter nu of nu-SVC, one-class SVM, and nu-SVR (default 0.5)\n"
-	"-p epsilon : set the epsilon in loss function of epsilon-SVR (default 0.1)\n"
-	"-m cachesize : set cache memory size in MB (default 100)\n"
-	"-e epsilon : set tolerance of termination criterion (default 0.001)\n"
-	"-h shrinking : whether to use the shrinking heuristics, 0 or 1 (default 1)\n"
-	"-b probability_estimates : whether to train a SVC or SVR model for probability estimates, 0 or 1 (default 0)\n"
-	"-wi weight : set the parameter C of class i to weight*C, for C-SVC (default 1)\n"
+	"\t%d -- linear: u'*v\n"
+	"\t%d -- polynomial: (gamma*u'*v + coef0)^degree\n"
+	"\t%d -- gaussian: exp(-gamma*||u-v||^2)\n"
+	"\t%d -- sigmoid: tanh(gamma*u'*v + coef0)\n"
+	"\t%d -- stump: -|u-v| + coef0\n"
+	"\t%d -- perceptron: -||u-v|| + coef0\n"
+	"\t%d -- laplacian: exp(-gamma*|u-v|)\n"
+	"\t%d -- exponential: exp(-gamma*||u-v||)\n"
+	"\t%d -- precomputed kernel (kernel values in training_set_file)\n"
+	"-d degree: set degree in kernel function (default 3)\n"
+	"-g gamma: set gamma in kernel function (default 1/num_features)\n"
+	"-r coef0: set coef0 in kernel function (default 0)\n"
+	"-c cost: set the parameter C of C-SVC (L1/L2-SVM), SVDD (L1/L2-SVM), epsilon-SVR, and nu-SVR (default 1)\n"
+	"-n nu: set the parameter nu of nu-SVC, one-class SVM, and nu-SVR (default 0.5)\n"
+	"-p epsilon: set the epsilon in loss function of epsilon-SVR (default 0.1)\n"
+	"-m cachesize: set cache memory size in MB (default 100)\n"
+	"-e epsilon: set tolerance of termination criterion (default 0.001)\n"
+	"-h shrinking: whether to use the shrinking heuristics, 0 or 1 (default 1)\n"
+	"-b probability_estimates: whether to train a SVC or SVR model for probability estimates, 0 or 1 (default 0)\n"
+	"-wi weight: set the parameter C of class i to weight*C, for C-SVC (default 1)\n"
 	"-v n: n-fold cross validation mode\n"
-	"-q : quiet mode (no outputs)\n"
-	);
+	"-q: quiet mode (no outputs)\n", C_SVC, C_SVC_L2, NU_SVC, ONE_CLASS, 
+			EPSILON_SVR, NU_SVR, SVDD, SVDD_L2, 
+			LINEAR, POLY, GAUSSIAN, SIGMOID, STUMP, 
+			PERC, LAPLACE, EXPO, PRECOMPUTED);
 	exit(1);
 }
 
@@ -160,7 +169,7 @@ void parse_command_line(int argc, char **argv, char *input_file_name, char *mode
 
 	// default values
 	param.svm_type = C_SVC;
-	param.kernel_type = RBF;
+	param.kernel_type = GAUSSIAN;
 	param.degree = 3;
 	param.gamma = 0;	// 1/num_features
 	param.coef0 = 0;
@@ -274,7 +283,7 @@ void read_problem(const char *filename)
 	FILE *fp = fopen(filename,"r");
 	char *endptr;
 	char *idx, *val, *label;
-
+	
 	if(fp == NULL)
 	{
 		fprintf(stderr,"can't open input file %s\n",filename);
@@ -340,7 +349,7 @@ void read_problem(const char *filename)
 				exit_input_error(i+1);
 
 			++j;
-		}
+		}	
 
 		if(inst_max_index > max_index)
 			max_index = inst_max_index;
