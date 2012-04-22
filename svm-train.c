@@ -19,6 +19,9 @@ void exit_with_help()
 	"	2 -- one-class SVM\n"
 	"	3 -- epsilon-SVR\n"
 	"	4 -- nu-SVR\n"
+	"	5 -- SVDD\n"
+	"	6 -- R^2: L1SVM\n"
+	"	7 -- R^2: L2SVM\n"
 	"-t kernel_type : set type of kernel function (default 2)\n"
 	"	0 -- linear: u'*v\n"
 	"	1 -- polynomial: (gamma*u'*v + coef0)^degree\n"
@@ -92,18 +95,23 @@ int main(int argc, char **argv)
 
 	if(error_msg)
 	{
-		fprintf(stderr,"ERROR: %s\n",error_msg);
+		fprintf(stderr,"Error: %s\n",error_msg);
 		exit(1);
 	}
 
 	if(cross_validation)
 	{
-		do_cross_validation();
+		if(param.svm_type == R2 || param.svm_type == R2q)
+			fprintf(stderr, "\"R^2\" cannot do cross validation.\n");
+		else
+			do_cross_validation();
 	}
 	else
 	{
 		model = svm_train(&prob,&param);
-		if(svm_save_model(model_file_name,model))
+		if(param.svm_type == R2 || param.svm_type == R2q)
+			fprintf(stderr, "\"R^2\" does not generate model.\n");
+		else if(svm_save_model(model_file_name,model))
 		{
 			fprintf(stderr, "can't save model to file %s\n", model_file_name);
 			exit(1);

@@ -1,16 +1,14 @@
 #include <stdlib.h>
 #include <string.h>
-#include "../svm.h"
+#include "svm.h"
 
 #include "mex.h"
 
-#ifdef MX_API_VER
 #if MX_API_VER < 0x07030000
 typedef int mwIndex;
 #endif
-#endif
 
-#define NUM_OF_RETURN_FIELD 10
+#define NUM_OF_RETURN_FIELD 12
 
 #define Malloc(type,n) (type *)malloc((n)*sizeof(type))
 
@@ -19,6 +17,8 @@ static const char *field_names[] = {
 	"nr_class",
 	"totalSV",
 	"rho",
+	"obj",
+	"radius",
 	"Label",
 	"ProbA",
 	"ProbB",
@@ -66,6 +66,20 @@ const char *model_to_matlab_structure(mxArray *plhs[], int num_of_feature, struc
 		ptr[i] = model->rho[i];
 	out_id++;
 
+	// obj
+	n = model->nr_class*(model->nr_class-1)/2;
+	rhs[out_id] = mxCreateDoubleMatrix(1, 1, mxREAL);
+	ptr = mxGetPr(rhs[out_id]);
+	for(i = 0; i < n; i++)
+		ptr[i] = model->obj[i];
+	out_id++;
+
+	//radius
+	rhs[out_id] = mxCreateDoubleMatrix(1, 1, mxREAL);
+	ptr = mxGetPr(rhs[out_id]);
+	ptr[0] = model->radius;
+	out_id++;
+	
 	// Label
 	if(model->label)
 	{
@@ -182,6 +196,7 @@ const char *model_to_matlab_structure(mxArray *plhs[], int num_of_feature, struc
 		out_id++;
 	}
 
+
 	/* Create a struct matrix contains NUM_OF_RETURN_FIELD fields */
 	return_model = mxCreateStructMatrix(1, 1, NUM_OF_RETURN_FIELD, field_names);
 
@@ -217,6 +232,7 @@ struct svm_model *matlab_matrix_to_model(const mxArray *matlab_struct, const cha
 
 	model = Malloc(struct svm_model, 1);
 	model->rho = NULL;
+	model->obj = NULL;
 	model->probA = NULL;
 	model->probB = NULL;
 	model->label = NULL;
@@ -246,6 +262,20 @@ struct svm_model *matlab_matrix_to_model(const mxArray *matlab_struct, const cha
 	for(i=0;i<n;i++)
 		model->rho[i] = ptr[i];
 	id++;
+
+	// obj
+	n = model->nr_class * (model->nr_class-1)/2;
+	model->obj = (double*) malloc(n*sizeof(double));
+	ptr = mxGetPr(rhs[id]);
+	for(i=0;i<n;i++)
+		model->obj[i] = ptr[i];
+	id++;
+
+	//radius
+	ptr = mxGetPr(rhs[id]);
+	model->radius = (double)ptr[0];
+	id++;
+	
 
 	// label
 	if(mxIsEmpty(rhs[id]) == 0)
@@ -345,6 +375,7 @@ struct svm_model *matlab_matrix_to_model(const mxArray *matlab_struct, const cha
 
 		id++;
 	}
+	
 	mxFree(rhs);
 
 	return model;

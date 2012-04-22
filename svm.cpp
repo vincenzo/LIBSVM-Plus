@@ -5,8 +5,6 @@
 #include <float.h>
 #include <string.h>
 #include <stdarg.h>
-#include <limits.h>
-#include <locale.h>
 #include "svm.h"
 int libsvm_version = LIBSVM_VERSION;
 typedef float Qfloat;
@@ -401,6 +399,7 @@ public:
 		double upper_bound_p;
 		double upper_bound_n;
 		double r;	// for Solver_NU
+		double radius;  // for solve_svdd
 	};
 
 	void Solve(int l, const QMatrix& Q, const double *p_, const schar *y_,
@@ -476,7 +475,7 @@ void Solver::reconstruct_gradient()
 			nr_free++;
 
 	if(2*nr_free < active_size)
-		info("\nWARNING: using -h 0 may be faster\n");
+		info("\nWarning: using -h 0 may be faster\n");
 
 	if (nr_free*l > 2*active_size*(l-active_size))
 	{
@@ -558,10 +557,9 @@ void Solver::Solve(int l, const QMatrix& Q, const double *p_, const schar *y_,
 	// optimization step
 
 	int iter = 0;
-	int max_iter = max(10000000, l>INT_MAX/100 ? INT_MAX : 100*l);
 	int counter = min(l,1000)+1;
-	
-	while(iter < max_iter)
+
+	while(1)
 	{
 		// show progress and do shrinking
 
@@ -726,18 +724,6 @@ void Solver::Solve(int l, const QMatrix& Q, const double *p_, const schar *y_,
 						G_bar[k] += C_j * Q_j[k];
 			}
 		}
-	}
-
-	if(iter >= max_iter)
-	{
-		if(active_size < l)
-		{
-			// reconstruct the whole gradient to calculate objective value
-			reconstruct_gradient();
-			active_size = l;
-			info("*");
-		}
-		info("\nWARNING: reaching max number of iterations");
 	}
 
 	// calculate rho
@@ -1359,6 +1345,56 @@ private:
 	double *QD;
 };
 
+class R2_Qq: public Kernel
+{
+public:
+        R2_Qq(const svm_problem& prob, const svm_parameter& param)
+        :Kernel(prob.l, prob.x, param)
+        {
+                cache = new Cache(prob.l,(int)(param.cache_size*(1<<20)));
+                this->C = param.C;
+                QD = new double[prob.l];
+                for(int i=0;i<prob.l;i++)
+                        QD[i]= (Qfloat)(this->*kernel_function)(i,i) + 1/C;
+
+        }
+
+        Qfloat *get_Q(int i, int len) const
+        {
+                Qfloat *data;
+                int start;
+                if((start = cache->get_data(i,&data,len)) < len)
+                {
+                        for(int j=start;j<len;j++)
+                                data[j] = (Qfloat)(this->*kernel_function)(i,j);
+                        if(i >= start && i < len)
+                                data[i] += 1/C;
+                }
+                return data;
+        }
+
+	double *get_QD() const
+        {
+                return QD;
+        }
+
+        void swap_index(int i, int j) const
+        {
+                cache->swap_index(i,j);
+                Kernel::swap_index(i,j);
+		swap(QD[i],QD[j]);
+        }
+
+        ~R2_Qq()
+        {
+                delete cache;
+        }
+private:
+        Cache *cache;
+        double C;
+	double *QD;
+};
+
 class SVR_Q: public Kernel
 { 
 public:
@@ -1635,13 +1671,143 @@ static void solve_nu_svr(
 	delete[] y;
 }
 
+static void solve_r2(
+        const svm_problem *prob, const svm_parameter *param,
+        double *alpha, Solver::SolutionInfo* si)
+{
+        int l = prob->l;
+	double* diag = new double[l];
+        schar *ones = new schar[l];
+        int i;
+
+        alpha[0] = 1;
+        for(i=1;i<l;i++)
+                alpha[i] = 0;
+
+        for(i=0;i<l;i++)
+        {
+		if(param->kernel_type != RBF)
+			diag[i]=-Kernel::k_function(prob->x[i],prob->x[i],*param)/2;
+		else
+			diag[i]=-0.5;
+		ones[i] = 1;
+        }
+
+	Solver s;
+	s.Solve(l, ONE_CLASS_Q(*prob,*param), diag, ones,
+		alpha, INF, INF, param->eps, si, param->shrinking);
+
+	info("R^2 = %f\n", -2 *si->obj);
+
+	delete[] diag;
+	delete[] ones;
+}
+
+static void solve_r2q(
+        const svm_problem *prob, const svm_parameter *param,
+        double *alpha, Solver::SolutionInfo* si)
+{
+        int l = prob->l;
+        double* diag = new double[l];
+        schar *ones = new schar[l];
+        int i;
+
+        alpha[0] = 1;
+        for(i=1;i<l;i++)
+                alpha[i] = 0;
+
+        for(i=0;i<l;i++)
+        {
+		if(param->kernel_type != RBF)
+			diag[i]=-0.5*(Kernel::k_function(prob->x[i],prob->x[i],*param) + 1.0/param->C);
+		else
+			diag[i]=-0.5*(1.0 + 1.0/param->C);
+		ones[i] = 1;
+        }
+
+        Solver s;
+        s.Solve(l, R2_Qq(*prob,*param), diag, ones,
+                alpha, INF, INF, param->eps, si, param->shrinking);
+
+        info("R^2 = %f\n", -2 *si->obj);
+
+        delete[] diag;
+        delete[] ones;
+}
+
+static void solve_svdd(
+        const svm_problem *prob, const svm_parameter *param,
+        double *alpha, Solver::SolutionInfo* si)
+{
+        int l = prob->l;
+        double *linear_term = new double[l];
+        schar *ones = new schar[l];
+        int i;
+
+        int n = (int)(param->nu * l);
+        double ub = 1 / (double) n;
+
+        for(i=0;i<n;i++)
+                alpha[i] = ub;
+        if(n<l)
+                alpha[n] = 1 - n * ub;
+        for(i=n+1;i<l;i++)
+                alpha[i] = 0;
+
+        ONE_CLASS_Q Q = ONE_CLASS_Q(*prob, *param);  //re-use one-class Q
+        for(i=0;i<l;i++) {
+                linear_term[i] = -0.5 * Q.get_QD()[i];
+                ones[i] = 1;
+        }
+
+        Solver s;
+
+        s.Solve(l, Q, linear_term, ones, alpha, ub, ub,
+                param->eps, si, param->shrinking);
+
+        int j = 0; double min_coef = DBL_MAX;
+        for(i=0;i<l;i++)
+        {
+                if(alpha[i]>0 && alpha[i]<ub && alpha[i] < min_coef)
+                {
+			min_coef = alpha[i];
+                        j = i;
+                }
+        }
+
+        int k;
+        double r = Q.get_QD()[j];
+        for(i=0;i<l;i++)
+        {
+                if(alpha[i]>0)
+                {
+                        r -= 2* alpha[i] * Kernel::k_function(prob->x[j],prob->x[i],*param);
+                        for(k=0;k<l;k++)
+                                if(alpha[k]>0)
+                                        r += alpha[i] * alpha[k] * Kernel::k_function(prob->x[k],prob->x[i],*param);
+                }
+        }
+
+        si->radius = sqrt(r);
+        info("radius = %f\n",si->radius);
+
+        delete[] linear_term;
+        delete[] ones;
+}
+
+
+
 //
 // decision_function
 //
 struct decision_function
 {
 	double *alpha;
-	double rho;	
+	double rho;
+
+	// for SVDD
+	double obj;
+	double radius;
 };
 
 static decision_function svm_train_one(
@@ -1667,6 +1833,17 @@ static decision_function svm_train_one(
 		case NU_SVR:
 			solve_nu_svr(prob,param,alpha,&si);
 			break;
+		case SVDD:
+			solve_svdd(prob,param,alpha,&si);
+			break;
+		case R2:
+			solve_r2(prob,param,alpha,&si);
+			break;
+		case R2q:
+			solve_r2q(prob,param,alpha,&si);
+			break;
+
+
 	}
 
 	info("obj = %f, rho = %f\n",si.obj,si.rho);
@@ -1698,6 +1875,8 @@ static decision_function svm_train_one(
 	decision_function f;
 	f.alpha = alpha;
 	f.rho = si.rho;
+	f.obj = si.obj;
+	f.radius = si.radius;
 	return f;
 }
 
@@ -2079,7 +2258,10 @@ svm_model *svm_train(const svm_problem *prob, const svm_parameter *param)
 
 	if(param->svm_type == ONE_CLASS ||
 	   param->svm_type == EPSILON_SVR ||
-	   param->svm_type == NU_SVR)
+	   param->svm_type == NU_SVR ||
+	   param->svm_type == SVDD ||
+	   param->svm_type == R2 ||
+	   param->svm_type == R2q)
 	{
 		// regression or one-class-svm
 		model->nr_class = 2;
@@ -2099,6 +2281,8 @@ svm_model *svm_train(const svm_problem *prob, const svm_parameter *param)
 		decision_function f = svm_train_one(prob,param,0,0);
 		model->rho = Malloc(double,1);
 		model->rho[0] = f.rho;
+		model->obj = Malloc(double,1);
+		model->obj[0] = f.obj;
 
 		int nSV = 0;
 		int i;
@@ -2116,6 +2300,9 @@ svm_model *svm_train(const svm_problem *prob, const svm_parameter *param)
 				++j;
 			}		
 
+		if (param->svm_type == SVDD)	
+			model->radius = f.radius;
+
 		free(f.alpha);
 	}
 	else
@@ -2129,10 +2316,7 @@ svm_model *svm_train(const svm_problem *prob, const svm_parameter *param)
 		int *perm = Malloc(int,l);
 
 		// group training data of the same class
-		svm_group_classes(prob,&nr_class,&label,&start,&count,perm);
-		if(nr_class == 1) 
-			info("WARNING: training data in only one class. See README for details.\n");
-		
+		svm_group_classes(prob,&nr_class,&label,&start,&count,perm);		
 		svm_node **x = Malloc(svm_node *,l);
 		int i;
 		for(i=0;i<l;i++)
@@ -2150,7 +2334,7 @@ svm_model *svm_train(const svm_problem *prob, const svm_parameter *param)
 				if(param->weight_label[i] == label[j])
 					break;
 			if(j == nr_class)
-				fprintf(stderr,"WARNING: class label %d specified in weight is not found\n", param->weight_label[i]);
+				fprintf(stderr,"warning: class label %d specified in weight is not found\n", param->weight_label[i]);
 			else
 				weighted_C[j] *= param->weight[i];
 		}
@@ -2217,6 +2401,10 @@ svm_model *svm_train(const svm_problem *prob, const svm_parameter *param)
 		model->rho = Malloc(double,nr_class*(nr_class-1)/2);
 		for(i=0;i<nr_class*(nr_class-1)/2;i++)
 			model->rho[i] = f[i].rho;
+
+		model->obj = Malloc(double,nr_class*(nr_class-1)/2);
+		for(i=0;i<nr_class*(nr_class-1)/2;i++)
+			model->obj[i] = f[i].obj; 
 
 		if(param->probability)
 		{
@@ -2458,14 +2646,13 @@ double svm_get_svr_probability(const svm_model *model)
 
 double svm_predict_values(const svm_model *model, const svm_node *x, double* dec_values)
 {
-	int i;
 	if(model->param.svm_type == ONE_CLASS ||
 	   model->param.svm_type == EPSILON_SVR ||
 	   model->param.svm_type == NU_SVR)
 	{
 		double *sv_coef = model->sv_coef[0];
 		double sum = 0;
-		for(i=0;i<model->l;i++)
+		for(int i=0;i<model->l;i++)
 			sum += sv_coef[i] * Kernel::k_function(x,model->SV[i],model->param);
 		sum -= model->rho[0];
 		*dec_values = sum;
@@ -2475,8 +2662,25 @@ double svm_predict_values(const svm_model *model, const svm_node *x, double* dec
 		else
 			return sum;
 	}
+	else if (model->param.svm_type == SVDD) 
+	{
+		// Compute distance from center of hypersphere              
+		double *sv_coef = model->sv_coef[0];                        
+		double d = Kernel::k_function(x,x,model->param), l = 0;
+		for(int i=0;i<model->l;i++) 
+		{
+			d -= 2 * sv_coef[i] * Kernel::k_function(x,model->SV[i],model->param);         
+			l += sv_coef[i] * Kernel::k_function(model->SV[i],model->SV[i],model->param);  
+		}
+		// Hack: Get quadratic term from objective of QP            
+		//       First remove scaling and then linear term          
+		double q = 2 * model->obj[0] + l;
+		*dec_values = sqrt(d + q);
+		return (*dec_values<=model->radius?1:-1);
+	}       
 	else
 	{
+		int i;
 		int nr_class = model->nr_class;
 		int l = model->l;
 		
@@ -2538,7 +2742,8 @@ double svm_predict(const svm_model *model, const svm_node *x)
 	double *dec_values;
 	if(model->param.svm_type == ONE_CLASS ||
 	   model->param.svm_type == EPSILON_SVR ||
-	   model->param.svm_type == NU_SVR)
+	   model->param.svm_type == NU_SVR ||
+	   model->param.svm_type == SVDD)
 		dec_values = Malloc(double, 1);
 	else 
 		dec_values = Malloc(double, nr_class*(nr_class-1)/2);
@@ -2588,7 +2793,7 @@ double svm_predict_probability(
 
 static const char *svm_type_table[] =
 {
-	"c_svc","nu_svc","one_class","epsilon_svr","nu_svr",NULL
+	"c_svc","nu_svc","one_class","epsilon_svr","nu_svr","svdd","r2","r2q",NULL
 };
 
 static const char *kernel_type_table[]=
@@ -2600,9 +2805,6 @@ int svm_save_model(const char *model_file_name, const svm_model *model)
 {
 	FILE *fp = fopen(model_file_name,"w");
 	if(fp==NULL) return -1;
-
-	char *old_locale = strdup(setlocale(LC_ALL, NULL));
-	setlocale(LC_ALL, "C");
 
 	const svm_parameter& param = model->param;
 
@@ -2630,6 +2832,12 @@ int svm_save_model(const char *model_file_name, const svm_model *model)
 		fprintf(fp, "\n");
 	}
 	
+	{
+		fprintf(fp, "obj");
+		for(int i=0;i<nr_class*(nr_class-1)/2;i++)                  
+			fprintf(fp," %g",model->obj[i]);
+		fprintf(fp, "\n");
+	}      	
 	if(model->label)
 	{
 		fprintf(fp, "label");
@@ -2661,6 +2869,10 @@ int svm_save_model(const char *model_file_name, const svm_model *model)
 		fprintf(fp, "\n");
 	}
 
+	if (model->param.svm_type == SVDD)
+	{
+		fprintf(fp, "radius %g\n", model->radius);
+	}
 	fprintf(fp, "SV\n");
 	const double * const *sv_coef = model->sv_coef;
 	const svm_node * const *SV = model->SV;
@@ -2682,10 +2894,6 @@ int svm_save_model(const char *model_file_name, const svm_model *model)
 			}
 		fprintf(fp, "\n");
 	}
-
-	setlocale(LC_ALL, old_locale);
-	free(old_locale);
-
 	if (ferror(fp) != 0 || fclose(fp) != 0) return -1;
 	else return 0;
 }
@@ -2715,15 +2923,13 @@ svm_model *svm_load_model(const char *model_file_name)
 {
 	FILE *fp = fopen(model_file_name,"rb");
 	if(fp==NULL) return NULL;
-
-	char *old_locale = strdup(setlocale(LC_ALL, NULL));
-	setlocale(LC_ALL, "C");
-
+	
 	// read parameters
 
 	svm_model *model = Malloc(svm_model,1);
 	svm_parameter& param = model->param;
 	model->rho = NULL;
+	model->obj = NULL;
 	model->probA = NULL;
 	model->probB = NULL;
 	model->label = NULL;
@@ -2749,10 +2955,8 @@ svm_model *svm_load_model(const char *model_file_name)
 			if(svm_type_table[i] == NULL)
 			{
 				fprintf(stderr,"unknown svm type.\n");
-				
-				setlocale(LC_ALL, old_locale);
-				free(old_locale);
 				free(model->rho);
+				free(model->obj);
 				free(model->label);
 				free(model->nSV);
 				free(model);
@@ -2774,10 +2978,8 @@ svm_model *svm_load_model(const char *model_file_name)
 			if(kernel_type_table[i] == NULL)
 			{
 				fprintf(stderr,"unknown kernel function.\n");
-				
-				setlocale(LC_ALL, old_locale);
-				free(old_locale);
 				free(model->rho);
+				free(model->obj);
 				free(model->label);
 				free(model->nSV);
 				free(model);
@@ -2800,6 +3002,13 @@ svm_model *svm_load_model(const char *model_file_name)
 			model->rho = Malloc(double,n);
 			for(int i=0;i<n;i++)
 				fscanf(fp,"%lf",&model->rho[i]);
+		}
+		else if(strcmp(cmd,"obj")==0)
+		{
+			int n = model->nr_class * (model->nr_class-1)/2;
+			model->obj = Malloc(double,n);
+			for(int i=0;i<n;i++)
+				fscanf(fp,"%lf",&model->obj[i]);
 		}
 		else if(strcmp(cmd,"label")==0)
 		{
@@ -2829,6 +3038,8 @@ svm_model *svm_load_model(const char *model_file_name)
 			for(int i=0;i<n;i++)
 				fscanf(fp,"%d",&model->nSV[i]);
 		}
+		else if(strcmp(cmd,"radius")==0)
+			fscanf(fp,"%lf",&model->radius);
 		else if(strcmp(cmd,"SV")==0)
 		{
 			while(1)
@@ -2841,10 +3052,8 @@ svm_model *svm_load_model(const char *model_file_name)
 		else
 		{
 			fprintf(stderr,"unknown text in model file: [%s]\n",cmd);
-			
-			setlocale(LC_ALL, old_locale);
-			free(old_locale);
 			free(model->rho);
+			free(model->obj);
 			free(model->label);
 			free(model->nSV);
 			free(model);
@@ -2916,9 +3125,6 @@ svm_model *svm_load_model(const char *model_file_name)
 	}
 	free(line);
 
-	setlocale(LC_ALL, old_locale);
-	free(old_locale);
-
 	if (ferror(fp) != 0 || fclose(fp) != 0)
 		return NULL;
 
@@ -2944,6 +3150,9 @@ void svm_free_model_content(svm_model* model_ptr)
 
 	free(model_ptr->rho);
 	model_ptr->rho = NULL;
+
+	free(model_ptr->obj);
+	model_ptr->obj = NULL;
 
 	free(model_ptr->label);
 	model_ptr->label= NULL;
@@ -2983,7 +3192,10 @@ const char *svm_check_parameter(const svm_problem *prob, const svm_parameter *pa
 	   svm_type != NU_SVC &&
 	   svm_type != ONE_CLASS &&
 	   svm_type != EPSILON_SVR &&
-	   svm_type != NU_SVR)
+	   svm_type != NU_SVR &&
+	   svm_type != SVDD &&
+	   svm_type != R2 &&
+	   svm_type != R2q)
 		return "unknown svm type";
 	
 	// kernel_type, degree
@@ -3018,7 +3230,8 @@ const char *svm_check_parameter(const svm_problem *prob, const svm_parameter *pa
 
 	if(svm_type == NU_SVC ||
 	   svm_type == ONE_CLASS ||
-	   svm_type == NU_SVR)
+	   svm_type == NU_SVR ||
+	   svm_type == SVDD)
 		if(param->nu <= 0 || param->nu > 1)
 			return "nu <= 0 or nu > 1";
 
@@ -3035,7 +3248,7 @@ const char *svm_check_parameter(const svm_problem *prob, const svm_parameter *pa
 		return "probability != 0 and probability != 1";
 
 	if(param->probability == 1 &&
-	   svm_type == ONE_CLASS)
+	   (svm_type == ONE_CLASS || svm_type == SVDD))
 		return "one-class SVM probability output not supported yet";
 
 
