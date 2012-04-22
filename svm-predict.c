@@ -76,9 +76,12 @@ void predict(FILE *input, FILE *output)
 		char *idx, *val, *label, *endptr;
 		int inst_max_index = -1; // strtol gives 0 if wrong format, and precomputed kernel has <index> start from 0
 
-		label = strtok(line," \t");
+		label = strtok(line," \t\n");
+		if(label == NULL) // empty line
+			exit_input_error(total+1);
+
 		target_label = strtod(label,&endptr);
-		if(endptr == label)
+		if(endptr == label || *endptr != '\0')
 			exit_input_error(total+1);
 
 		while(1)
@@ -107,7 +110,7 @@ void predict(FILE *input, FILE *output)
 				exit_input_error(total+1);
 
 			++i;
-		}	
+		}
 		x[i].index = -1;
 
 		if (predict_probability && (svm_type==C_SVC || svm_type==NU_SVC))
@@ -201,7 +204,7 @@ int main(int argc, char **argv)
 		fprintf(stderr,"can't open model file %s\n",argv[i+1]);
 		exit(1);
 	}
-	
+
 	x = (struct svm_node *) malloc(max_nr_attr*sizeof(struct svm_node));
 	if(predict_probability)
 	{
@@ -217,7 +220,7 @@ int main(int argc, char **argv)
 			printf("Model supports probability estimates, but disabled in prediction.\n");
 	}
 	predict(input,output);
-	svm_destroy_model(model);
+	svm_free_and_destroy_model(&model);
 	free(x);
 	free(line);
 	fclose(input);
