@@ -2,15 +2,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include "../svm.h"
+#include "svm.h"
 
 #include "mex.h"
 #include "svm_model_matlab.h"
 
-#ifdef MX_API_VER
 #if MX_API_VER < 0x07030000
 typedef int mwIndex;
-#endif
 #endif
 
 #define CMD_LEN 2048
@@ -30,6 +28,9 @@ void exit_with_help()
 	"	2 -- one-class SVM\n"
 	"	3 -- epsilon-SVR\n"
 	"	4 -- nu-SVR\n"
+	"	5 -- SVDD\n"
+	"	6 -- R^2: L1SVM\n"
+	"	7 -- R^2: L2SVM\n"
 	"-t kernel_type : set type of kernel function (default 2)\n"
 	"	0 -- linear: u'*v\n"
 	"	1 -- polynomial: (gamma*u'*v + coef0)^degree\n"
@@ -445,10 +446,17 @@ void mexFunction( int nlhs, mxArray *plhs[],
 
 		if(cross_validation)
 		{
+			if(param.svm_type == R2 || param.svm_type == R2q)
+			{
+				mexPrintf("\"R^2\" cannot do cross validation.\n");
+				fake_answer(plhs);
+				return;
+			}
 			double *ptr;
 			plhs[0] = mxCreateDoubleMatrix(1, 1, mxREAL);
 			ptr = mxGetPr(plhs[0]);
 			ptr[0] = do_cross_validation();
+			
 		}
 		else
 		{
@@ -459,6 +467,11 @@ void mexFunction( int nlhs, mxArray *plhs[],
 			if(error_msg)
 				mexPrintf("Error: can't convert libsvm model to matrix structure: %s\n", error_msg);
 			svm_free_and_destroy_model(&model);
+			if(param.svm_type == R2 || param.svm_type == R2q)
+			{
+				mexPrintf("\"R^2\" does not generate model.\n");
+				fake_answer(plhs);
+			}
 		}
 		svm_destroy_param(&param);
 		free(prob.y);
