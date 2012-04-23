@@ -7,7 +7,7 @@
 #include <stdarg.h>
 #include "svm.h"
 int libsvm_version = LIBSVM_VERSION;
-typedef float Qfloat;
+typedef double Qfloat;
 typedef signed char schar;
 #ifndef min
 template <class T> static inline T min(T x,T y) { return (x<y)?x:y; }
