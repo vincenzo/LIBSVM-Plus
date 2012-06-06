@@ -2752,6 +2752,20 @@ double svm_predict(const svm_model *model, const svm_node *x)
 	return pred_result;
 }
 
+double svm_predict_spheroid_distance(const svm_model *model, const svm_node *x, double *distance)
+{
+	if (model->param.svm_type == SVDD)
+	{
+		double pred_result = svm_predict_values(model, x, distance);
+		return pred_result;
+	}
+	else
+	{
+		return svm_predict(model, x);
+	}
+}
+
+
 double svm_predict_probability(
 	const svm_model *model, const svm_node *x, double *prob_estimates)
 {
@@ -2869,7 +2883,7 @@ int svm_save_model(const char *model_file_name, const svm_model *model)
 		fprintf(fp, "\n");
 	}
 
-	if (model->param.svm_type == SVDD)
+	if (param.svm_type == SVDD)
 	{
 		fprintf(fp, "radius %g\n", model->radius);
 	}
