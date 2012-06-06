@@ -10,6 +10,7 @@ int max_nr_attr = 64;
 
 struct svm_model* model;
 int predict_probability=0;
+int spheroid_distance=0;
 
 static char *line = NULL;
 static int max_line_len;
@@ -72,7 +73,7 @@ void predict(FILE *input, FILE *output)
 	while(readline(input) != NULL)
 	{
 		int i = 0;
-		double target_label, predict_label;
+		double target_label, predict_label, distance;
 		char *idx, *val, *label, *endptr;
 		int inst_max_index = -1; // strtol gives 0 if wrong format, and precomputed kernel has <index> start from 0
 
@@ -121,6 +122,11 @@ void predict(FILE *input, FILE *output)
 				fprintf(output," %g",prob_estimates[j]);
 			fprintf(output,"\n");
 		}
+		else if (svm_type==SVDD && spheroid_distance)
+		{
+			predict_label = svm_predict_spheroid_distance(model,x, &distance);
+			fprintf(output, "%g %g\n", predict_label, distance);
+		}
 		else
 		{
 			predict_label = svm_predict(model,x);
@@ -158,6 +164,7 @@ void exit_with_help()
 	"Usage: svm-predict [options] test_file model_file output_file\n"
 	"options:\n"
 	"-b probability_estimates: whether to predict probability estimates, 0 or 1 (default 0); for one-class SVM only 0 is supported\n"
+	"-d spheroid_distance: whether to include distance from spheroid center, 0 or 1 (default 0); for SVDD only\n"
 	);
 	exit(1);
 }
@@ -176,6 +183,9 @@ int main(int argc, char **argv)
 		{
 			case 'b':
 				predict_probability = atoi(argv[i]);
+				break;
+			case 'd':
+				spheroid_distance = atoi(argv[i]);
 				break;
 			default:
 				fprintf(stderr,"Unknown option: -%c\n", argv[i-1][1]);
